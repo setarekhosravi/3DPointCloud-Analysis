@@ -1,1 +1,3 @@
 Datasets/ModelNet10
+*.ply
+*.txt
