@@ -1,3 +1,4 @@
 Datasets/ModelNet10
+Datasets/__MACOSX/
 *.ply
 *.txt
