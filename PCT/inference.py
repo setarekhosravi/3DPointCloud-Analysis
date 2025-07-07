@@ -45,7 +45,8 @@ def visualize_open3d(pointcloud_np, title=""):
 
 def infer(file_path, model_path):
     # Load and preprocess point cloud
-    verts, faces = read_off(file_path) 
+    with open(file_path, 'r') as f:
+        verts, faces = read_off(f)
     pointcloud = PointSampler(2048)([verts, faces])
     transform = default_transforms()
     sample = {'pointcloud': pointcloud, 'category': 0}
