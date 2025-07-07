@@ -31,7 +31,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 # body of the code started 
-path = Path("Datasets/ModelNet10")   
+path = Path('Datasets/ModelNet10')   
 # print(path)
 
 # we can use open3d to sample from the mesh to extract a point cloud
@@ -110,13 +110,13 @@ class ToTensor(object):
 
         return torch.from_numpy(pointcloud)
     
-# define the dataset class
+# define the dataset class using 3D Data Science book with minor changes (debugging some lines)
 class PointCloudData(Dataset):
-    def __init__(self, root_dir, valid=False, folder="train", transform=None):
+    def __init__(self, root_dir, valid=False, folder='train', transform=None):
         self.root_dir = root_dir
         folders = [dir for dir in sorted(os.listdir(root_dir)) if os.path.isdir(root_dir/dir)]
         self.classes = {folder: i for i, folder in enumerate(folders)}
-        self.transforms = transform or default_transforms()
+        self.transforms = transform if not valid else default_transforms()
         self.valid = valid
         self.files = []
         for category in self.classes.keys():
@@ -218,7 +218,7 @@ def pcshow(xs,ys,zs):
 
 # body of code to test the code
 if __name__ == "__main__":
-    with open(path/"chair/train/chair_0001.off", "r") as f:
+    with open(path/'chair/train/chair_0001.off', 'r') as f:
         verts, faces = read_off(f)
 
     i,j,k = np.array(faces).T
@@ -236,3 +236,14 @@ if __name__ == "__main__":
     rot_pointcloud = RandRotation_z()(norm_pointcloud)
     noisy_rot_pointcloud = RandomNoise()(rot_pointcloud)
     pcshow(*noisy_rot_pointcloud.T)
+
+    train_ds = PointCloudData(path, transform=train_transforms())
+    test_ds = PointCloudData(path, valid=True, folder='test', transform=default_transforms())
+
+    print('Train dataset size:', len(train_ds))
+    print('Test dataset size:', len(test_ds))
+    print('Number of classes:', len(train_ds.classes))
+    print("Sample pointcloud shape:", train_ds[0]['pointcloud'].shape)
+
+    data = train_ds[2000]
+    pcshow(*data['pointcloud'].T)
