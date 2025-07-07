@@ -10,6 +10,7 @@
 
 # import libraries
 from path import Path
+from tqdm import tqdm
 
 import torch
 import torch.nn as nn
@@ -39,11 +40,14 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
 
 def train(model, train_loader, test_loader, epochs=20):
+    best_acc = 0.0
     for epoch in range(epochs):
+        print(f'\nEpoch {epoch+1}/{epochs}')
         model.train()
         loss_total = AverageMeter()
         accuracy = torchmetrics.Accuracy().cuda()
 
+        train_bar = tqdm(train_loader, desc='Training', leave=False)
         for i, data in enumerate(train_loader, 0):
             inputs, labels = data['pointcloud'].to(device).float(), data['category'].to(device)
             optimizer.zero_grad()
@@ -56,10 +60,18 @@ def train(model, train_loader, test_loader, epochs=20):
             # decrease batches
             if i==10:
                 break
-        acc = 100*accuracy.compute()
+            train_bar.set_postfix({
+                'Loss': f'{loss_total.avg:.4f}',
+                'Train Acc': f'{100*accuracy.compute():.2f}%'
+            })
 
+        acc = 100*accuracy.compute()
+        print(f'Train Acc: {acc:.2f}%, Avg Loss: {loss_total.avg:.4f}')
+
+        # evaluation
         model.eval()
         correct = total = 0
+        test_bar = tqdm(test_loader, desc='Testing', leave=False)
         with torch.no_grad():
             for i, data in enumerate(test_loader):
                 inputs, labels = data['pointcloud'].to(device).float(), data['category'].to(device)
@@ -69,8 +81,21 @@ def train(model, train_loader, test_loader, epochs=20):
                 correct += (predicted == labels).sum().item()
                 if i==10:
                     break
+                test_bar.set_postfix({
+                    'Test Acc': f'{100 * correct / total:.2f}%'
+                })
         test_acc = 100*correct / total
-        print('test accuracy: %d %%' % test_acc)
+        print(f'Test Accuracy: {test_acc:.2f}%')
+
+        # Save last model (full model)
+        torch.save(model, 'last.pt')
+
+        # Save best model (full model)
+        if test_acc > best_acc:
+            best_acc = test_acc
+            torch.save(model, 'best.pt')
+            print(f'✅ New best model saved with accuracy: {best_acc:.2f}%')
+
 
 # define path
 path = Path('Datasets/ModelNet10') 
