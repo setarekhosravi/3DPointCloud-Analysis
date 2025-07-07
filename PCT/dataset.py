@@ -88,7 +88,7 @@ def pcshow(xs,ys,zs):
                                   selector=dict(mode='markers'))
     fig.show()
 
-
+# we can use open3d to sample from the mesh to extract a point cloud
 class PointSampler(object):
     def __init__(self, output_size):
         assert isinstance(output_size, int)
@@ -128,6 +128,17 @@ class PointSampler(object):
             
         return sampled_points
 
+# normalize the point cloud
+class Normalize(object):
+    def __call__(self, pointcloud):
+        assert len(pointcloud.shape) == 2
+        norm_pointcloud = pointcloud - np.mean(pointcloud, axis=0)
+        norm_pointcloud /= np.max(np.linalg.norm(norm_pointcloud, axis=1))
+
+        return norm_pointcloud
+
+
+
 if __name__ == "__main__":
     with open(path/"chair/train/chair_0001.off", "r") as f:
         verts, faces = read_off(f)
@@ -140,3 +151,6 @@ if __name__ == "__main__":
 
     pointcloud = PointSampler(2048)([verts, faces])
     pcshow(*pointcloud.T)
+
+    norm_pointcloud = Normalize()(pointcloud)
+    pcshow(*norm_pointcloud.T)
