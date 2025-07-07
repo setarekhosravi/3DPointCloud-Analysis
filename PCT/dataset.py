@@ -137,7 +137,25 @@ class Normalize(object):
 
         return norm_pointcloud
 
+# augment the point cloud
+class RandRotation_z(object):
+    def __call__(self, pointcloud):
+        assert  len(pointcloud.shape) == 2
 
+        theta = random.random() * 2. * math.pi
+        rot_matrix = np.array([[math.cos(theta), -math.sin(theta), 0],
+                               [math.sin(theta), math.cos(theta), 0],
+                               [0, 0, 1]])
+        rotated_pointcloud = rot_matrix.dot(pointcloud.T).T
+        return rotated_pointcloud
+    
+class RandomNoise(object):
+    def __call__(self, pointcloud):
+        assert len(pointcloud.shape) == 2
+
+        noise = np.random.normal(0, 0.02, (pointcloud.shape))
+        noisy_pointcloud = pointcloud + noise
+        return noisy_pointcloud
 
 if __name__ == "__main__":
     with open(path/"chair/train/chair_0001.off", "r") as f:
@@ -154,3 +172,7 @@ if __name__ == "__main__":
 
     norm_pointcloud = Normalize()(pointcloud)
     pcshow(*norm_pointcloud.T)
+
+    rot_pointcloud = RandRotation_z()(norm_pointcloud)
+    noisy_rot_pointcloud = RandomNoise()(rot_pointcloud)
+    pcshow(*noisy_rot_pointcloud.T)
