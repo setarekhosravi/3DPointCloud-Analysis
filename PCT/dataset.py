@@ -247,3 +247,7 @@ if __name__ == "__main__":
 
     data = train_ds[2000]
     pcshow(*data['pointcloud'].T)
+    
+    # create dataloaders should be moved to train code
+    train_loader = DataLoader(train_ds, batch_size=32, shuffle=True)
+    test_loader = DataLoader(test_ds, batch_size=64)
