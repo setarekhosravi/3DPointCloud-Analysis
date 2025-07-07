@@ -157,6 +157,7 @@ def pcshow(xs,ys,zs):
                                   selector=dict(mode='markers'))
     fig.show()
 
+# body of code to test the code
 if __name__ == "__main__":
     with open(path/"chair/train/chair_0001.off", "r") as f:
         verts, faces = read_off(f)
