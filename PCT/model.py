@@ -40,21 +40,26 @@ class Attention(nn.Module):
         super(Attention, self).__init__()
         self.q_conv = nn.Conv1d(channels, channels // 4, kernel_size=1, bias=False)
         self.k_conv = nn.Conv1d(channels, channels // 4, kernel_size=1, bias=False)
-        self.v_conv = nn.Conv1d(channels, channels, kernel_size=1, bias=False)
+        self.q_conv.weight = self.k_conv.weight
+        self.q_conv.bias = self.k_conv.bias
+
+        self.v_conv = nn.Conv1d(channels, channels, kernel_size=1)
+        self.trans_conv = nn.Conv1d(channels, channels, kernel_size=1)
+        self.after_norm = nn.BatchNorm1d(channels)
+        self.act = nn.ReLU()
         self.softmax = nn.Softmax(dim=-1)
-        self.conv = nn.Conv1d(channels, channels, kernel_size=1)
-        self.bn = nn.BatchNorm1d(channels)
 
     def forward(self, x):
         x_q = self.q_conv(x).permute(0, 2, 1)
         x_k = self.k_conv(x)
         x_v = self.v_conv(x)
-        w = torch.bmm(x_q, x_k)
-        w = self.softmax(w)
-        w /= (w.abs().sum(dim=-1, keepdim=True) + 1e-8)
-        x_r = torch.bmm(x_v, w)
-        x_r = F.relu(self.bn(self.conv(x - x_r)))
-        x += x_r
+        energy = torch.bmm(x_q, x_k)
+        attention = self.softmax(energy)
+        attention = attention / (1e-9 + attention.sum(dim=1, keepdim=True))
+
+        x_r = torch.bmm(x_v, attention)
+        x_r = self.act(self.after_norm(self.trans_conv(x - x_r)))
+        x = x + x_r
         return x
 
 # Transformer class
@@ -73,7 +78,7 @@ class Transformer(nn.Module):
         self.sa3 = Attention(channels)
         self.sa4 = Attention(channels)
 
-    def forwward(self, x):
+    def forward(self, x):
         # b, 3, npoints, nsample
         # conv2d 3-> 128 channels 1, 1
         # b * npoints, c, nsample
@@ -135,6 +140,7 @@ class PCT(nn.Module):
         new_points = self.mini1(new_points)
         new_xyz, new_points = sample_and_group(npoint=256, radius=0.2, nsample=32, xyz=new_xyz, points=new_points)
         new_points = self.mini2(new_points) # [b, n, c]
+        new_points = new_points.permute(0, 2, 1)
         feature = self.transformer(new_points)
         # To Do: Concat
         # LBR
