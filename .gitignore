@@ -1,4 +1,6 @@
 Datasets/ModelNet10
 Datasets/__MACOSX/
+result/
+__pycache__/
 *.ply
 *.txt
