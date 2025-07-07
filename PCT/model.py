@@ -31,6 +31,59 @@ import plotly.express as px
 import pointnet2_ops
 from pointnet2_ops.pointnet2_utils import furthest_point_sample
 
+# mini pointnet class
+class MiniPointNet(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(MiniPointNet, self).__init__()
+        self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size=1, bias=False)
+        self.bn1 = nn.BatchNorm1d(out_channels)
+        self.conv2 = nn.Conv1d(in_channels, out_channels, kernel_size=1, bias=False)
+        self.bn2 = nn.BatchNorm1d(out_channels)
+
+    def forward(self,x): # [B, N, S, C] = [32, 512, 32, 128]
+        b, n, s, c = x.size()
+        x = x.permute(0, 1, 3, 2) # [32, 512, 128, 32]
+        x = x.reshape(-1, c, s) # [32*512, 128, 32]
+        x = F.relu(self.bn1(self.conv1(x))) 
+        x = F.relu(self.bn2(self.conv2(x))) 
+        x = F.adaptive_max_pool1d(x, 1).unsqueeze(-1) # [32*512, 128]
+        x = x.reshape(b, n, c) # [32, 512, 128]
+        # x = x.permute(0, 2, 1) # [32, 128, 512]
+        return x
+    
+# Transformer class
+class Transformer(nn.Module):
+    def __init__(self, channels=256):
+        super(Transformer, self).__init__()
+        self.conv1 = nn.Conv1d(channels, channels, kernel_size=1, bias=False)
+        self.conv2 = nn.Conv1d(channels, channels, kernel_size=1, bias=False)
+
+        self.bn1 = nn.BatchNorm1d(channels)
+        self.bn2 = nn.BatchNorm1d(channels)
+
+        # self attention layers
+        self.sa1 = SA_Layer(channels)
+        self.sa2 = SA_Layer(channels)
+        self.sa3 = SA_Layer(channels)
+        self.sa4 = SA_Layer(channels)
+
+    def forwward(self, x):
+        # b, 3, npoints, nsample
+        # conv2d 3-> 128 channels 1, 1
+        # b * npoints, c, nsample
+        # permute reshape
+        batch_size, _, N = x.size()
+
+        # B, D, N
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = F.relu(self.bn2(self.conv2(x)))
+        x1 = self.sa1(x)
+        x2 = self.sa2(x1)
+        x3 = self.sa3(x2)
+        x4 = self.sa4(x3)
+        x = torch.cat((x1, x2, x3, x4), dim=1)
+        return x
+    
 # Point cloud transformer class
 class PCT(nn.Module):
     def __init__(self):
