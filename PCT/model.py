@@ -9,27 +9,11 @@
 """
 
 # import libraries
-import numpy as np
-import math
-import random
-import os
-import torch
-import scipy.spatial.distance
-from path import Path
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
 
-from torchvision import transforms, utils
-import torchmetrics
-
-import plotly.graph_objects as go
-import plotly.express as px
-
-import pointnet2_ops
-from pointnet2_ops.pointnet2_utils import furthest_point_sample
+from utils import sample_and_group
 
 # mini pointnet class
 class MiniPointNet(nn.Module):
@@ -46,7 +30,7 @@ class MiniPointNet(nn.Module):
         x = x.reshape(-1, c, s) # [32*512, 128, 32]
         x = F.relu(self.bn1(self.conv1(x))) 
         x = F.relu(self.bn2(self.conv2(x))) 
-        x = F.adaptive_max_pool1d(x, 1).unsqueeze(-1) # [32*512, 128]
+        x = F.adaptive_max_pool1d(x, 1).squeeze(-1) # [32*512, 128]
         x = x.reshape(b, n, c) # [32, 512, 128]
         # x = x.permute(0, 2, 1) # [32, 128, 512]
         return x
@@ -111,7 +95,7 @@ class PCT(nn.Module):
     def __init__(self):
         super(PCT, self).__init__()
 
-        # input embedding (Green in Fig 4 of paper)
+        # input embedding (Green in Fig 4 of paper) LBR
         self.conv1 = nn.Conv1d(3, 64, kernel_size=1, bias=False)
         self.bn1 = nn.BatchNorm1d(64)
         self.conv2 = nn.Conv1d(64, 64, kernel_size=1, bias=False)
@@ -120,8 +104,22 @@ class PCT(nn.Module):
         # input embedding (blue in Fig 4 of paper which has LBR)
         self.mini1 = MiniPointNet(128,128)
         self.mini2 = MiniPointNet(256,256)
+        
         # transformer
         self.transformer = Transformer(256)
+
+        # LBR
+        self.conv3 = nn.Conv1d(1024, 1024, kernel_size=1, bias=False)
+        self.bn3 = nn.BatchNorm1d(1024)
+        
+        # Classifier
+        self.cls = nn.Sequential(nn.Linear(1024, 512),
+                                 nn.LayerNorm(512),
+                                 nn.LeakyReLU(negative_slope=0.2),
+                                 nn.Linear(512, 256),
+                                 nn.LayerNorm(256),
+                                 nn.LeakyReLU(negative_slope=0.2),
+                                 nn.Linear(256, 10))
 
     def forward(self, x):
         xyz = x.permute(0, 2, 1)
@@ -138,88 +136,10 @@ class PCT(nn.Module):
         new_xyz, new_points = sample_and_group(npoint=256, radius=0.2, nsample=32, xyz=new_xyz, points=new_points)
         new_points = self.mini2(new_points) # [b, n, c]
         feature = self.transformer(new_points)
-        return new_xyz, new_points
-
-##############################################################
-####################Sampling and Grouping#####################
-##############################################################
-def index_points(points, idx):
-    """
-    Input:
-        points: input points data, [B, N, C]
-        idx: sample index data, [B, S]
-    Return:
-        new_points:, indexed points data, [B, S, C]
-    """
-    device = points.device
-    B = points.shape[0]
-    view_shape = list(idx.shape)
-    view_shape[1:] = [1] * (len(view_shape) - 1)
-    repeat_shape = list(idx.shape)
-    repeat_shape[0] = 1
-    batch_indices = torch.arange(B, dtype=torch.long).to(device).view(view_shape).repeat(repeat_shape)
-    new_points = points[batch_indices, idx, :]
-    return new_points
-
-def square_distance(src, dst):
-    """
-    Calculate Euclid distance between each two points.
-    src^T * dst = xn * xm + yn * ym + zn * zm；
-    sum(src^2, dim=-1) = xn*xn + yn*yn + zn*zn;
-    sum(dst^2, dim=-1) = xm*xm + ym*ym + zm*zm;
-    dist = (xn - xm)^2 + (yn - ym)^2 + (zn - zm)^2
-         = sum(src**2,dim=-1)+sum(dst**2,dim=-1)-2*src^T*dst
-    Input:
-        src: source points, [B, N, C]
-        dst: target points, [B, M, C]
-    Output:
-        dist: per-point square distance, [B, N, M]
-    """
-    B, N, _ = src.shape
-    _, M, _ = dst.shape
-    dist = -2 * torch.matmul(src, dst.permute(0, 2, 1))
-    dist += torch.sum(src ** 2, -1).view(B, N, 1)
-    dist += torch.sum(dst ** 2, -1).view(B, 1, M)
-    return dist
-
-def knn_point(nsample, xyz, new_xyz):
-    """
-    Input:
-        nsample: max sample number in local region
-        xyz: all points, [B, N, C]
-        new_xyz: query points, [B, S, C]
-    Return:
-        group_idx: grouped points index, [B, S, nsample]
-    """
-    sqrdists = square_distance(new_xyz, xyz)
-    _, group_idx = torch.topk(sqrdists, nsample, dim = -1, largest=False, sorted=False)
-    return group_idx
-
-def sample_and_group(npoint, radius, nsample, xyz, points):
-    """
-    Input:
-        npoint:
-        radius:
-        nsample:
-        xyz: input points position data, [B, N, 3]
-        points: input points data, [B, N, D]
-    Return:
-        new_xyz: sampled points position data, [B, npoint, 3]
-        new_points: sampled points data, [B, npoint, nsample, 3+D]
-    """
-    B, N, C = xyz.shape
-    S = npoint
-    xyz = xyz.contiguous()
-
-    fps_idx = furthest_point_sample(xyz, npoint).long() # [B, npoint]
-    new_xyz = index_points(xyz, fps_idx)
-    new_points = index_points(points, fps_idx)
-
-    idx = knn_point(nsample, xyz, new_xyz)
-    grouped_xyz = index_points(xyz, idx) # [B, npoint, nsample, C]
-    grouped_xyz_norm = grouped_xyz - new_xyz.view(B, S, 1, C)
-
-    grouped_points = index_points(points, idx)
-    grouped_points_norm = grouped_points - new_points.view(B, S, 1, -1)
-    new_points = torch.cat([grouped_points_norm, new_points.view(B, S, 1, -1).repeat(1, 1, nsample, 1)], dim=-1)
-    return new_xyz, new_points
+        # To Do: Concat
+        # LBR
+        feature = F.relu(self.bn3(self.conv3(feature)))
+        feature = F.adaptive_max_pool1d(feature, 1).squeeze(-1)
+        # Classifier
+        feature = self.cls(feature)
+        return feature
