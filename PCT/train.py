@@ -9,6 +9,7 @@
 """
 
 # import libraries
+import sys
 from path import Path
 from tqdm import tqdm
 
@@ -39,7 +40,7 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
-def train(model, train_loader, test_loader, epochs=20):
+def train(model, train_loader, test_loader, epochs=20, save_path="result/"):
     best_acc = 0.0
     for epoch in range(epochs):
         print(f'\nEpoch {epoch+1}/{epochs}')
@@ -47,8 +48,8 @@ def train(model, train_loader, test_loader, epochs=20):
         loss_total = AverageMeter()
         accuracy = torchmetrics.Accuracy().cuda()
 
-        train_bar = tqdm(train_loader, desc='Training', leave=False)
-        for i, data in enumerate(train_loader, 0):
+        train_bar = tqdm(train_loader, desc='Training', leave=False, dynamic_ncols=True, file=sys.stdout)
+        for i, data in enumerate(train_bar, 0):
             inputs, labels = data['pointcloud'].to(device).float(), data['category'].to(device)
             optimizer.zero_grad()
             outputs = model(inputs.transpose(1,2))
@@ -58,8 +59,8 @@ def train(model, train_loader, test_loader, epochs=20):
             loss_total.update(loss)
             accuracy(outputs.softmax(dim=-1), labels)
             # decrease batches
-            if i==10:
-                break
+            # if i==10:
+            #     break
             train_bar.set_postfix({
                 'Loss': f'{loss_total.avg:.4f}',
                 'Train Acc': f'{100*accuracy.compute():.2f}%'
@@ -71,16 +72,16 @@ def train(model, train_loader, test_loader, epochs=20):
         # evaluation
         model.eval()
         correct = total = 0
-        test_bar = tqdm(test_loader, desc='Testing', leave=False)
+        test_bar = tqdm(test_loader, desc='Testing', leave=False, dynamic_ncols=True, file=sys.stdout)
         with torch.no_grad():
-            for i, data in enumerate(test_loader):
+            for i, data in enumerate(test_bar):
                 inputs, labels = data['pointcloud'].to(device).float(), data['category'].to(device)
                 outputs = model(inputs.transpose(1,2))
                 _,predicted = torch.max(outputs.data, 1)
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
-                if i==10:
-                    break
+                # if i==10:
+                #     break
                 test_bar.set_postfix({
                     'Test Acc': f'{100 * correct / total:.2f}%'
                 })
@@ -88,17 +89,18 @@ def train(model, train_loader, test_loader, epochs=20):
         print(f'Test Accuracy: {test_acc:.2f}%')
 
         # Save last model (full model)
-        torch.save(model, 'last.pt')
+        torch.save(model, save_path + 'last.pt')
 
         # Save best model (full model)
         if test_acc > best_acc:
             best_acc = test_acc
-            torch.save(model, 'best.pt')
+            torch.save(model, save_path + 'best.pt')
             print(f'✅ New best model saved with accuracy: {best_acc:.2f}%')
 
 
 # define path
 path = Path('Datasets/ModelNet10') 
+save_path = "result/"
 
 # load data
 train_ds = PointCloudData(path, transform=train_transforms())
