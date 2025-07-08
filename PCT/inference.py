@@ -9,11 +9,9 @@
 """
 
 import torch
-import numpy as np
 import argparse
 import open3d as o3d
-from model import PCT
-from dataset import PointSampler, read_off, default_transforms
+from dataset import read_off, default_transforms
 
 # Class label map (update this based on your dataset)
 class_map = {
@@ -44,16 +42,18 @@ def visualize_open3d(pointcloud_np, title=""):
     vis.destroy_window()
 
 def infer(file_path, model_path):
-    # Load and preprocess point cloud
+    # Open the .off file like in your dataset class
     with open(file_path, 'r') as f:
         verts, faces = read_off(f)
-    pointcloud = PointSampler(2048)([verts, faces])
-    transform = default_transforms()
-    sample = {'pointcloud': pointcloud, 'category': 0}
-    sample = transform(sample)
-    pc_tensor = sample['pointcloud'].unsqueeze(0).to(device).float()  # [1, N, 3]
 
-    # Load model (entire model object)
+    # Apply the correct transform: transform((verts, faces))
+    transform = default_transforms()
+    pointcloud = transform((verts, faces))
+
+    # Prepare tensor
+    pc_tensor = pointcloud.unsqueeze(0).to(device).float()  # shape: [1, N, 3]
+
+    # Load full model
     model = torch.load(model_path, map_location=device)
     model.to(device)
     model.eval()
