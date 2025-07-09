@@ -118,5 +118,3 @@ This implementation is part of a learning project and inspired by:
 
 * 📘 Howsam Academy Course on Computer Vision — *Seyed Sajad Ashrafi*
 * 📘 3D Data Science — *Florent Poux*
-
-```
