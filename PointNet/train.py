@@ -9,13 +9,37 @@
 """
 
 # import libraries
+import sys
 from path import Path
+from tqdm import tqdm
 
 import torch
+import torchmetrics
 from torch.utils.data import DataLoader
 
 from model import PointNet
 from dataset import PointCloudData, default_transforms, train_transforms
+
+
+class AverageMeter(object):
+    """
+    Computes and stores the average and current value of loss
+    """
+    def __init__(self):
+        self.reset()
+    
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
 
 def pointNetLoss(outputs, labels, m3x3, m64x64, alpha=0.0001):
     """
@@ -37,10 +61,15 @@ def pointNetLoss(outputs, labels, m3x3, m64x64, alpha=0.0001):
     return criterion(outputs, labels) + alpha * (torch.norm(diff3x3) + torch.norm(dif64x64)) / float(bs)
 
 def train(model, train_loader, val_loader=None, epochs=20, save=True):
+    best_acc = 0.0
     for epoch in range(epochs):
         pointnet.train()
         running_loss = 0.0
-        for i, data in enumerate(train_loader, 0):
+        loss_total = AverageMeter()
+        accuracy = torchmetrics.Accuracy().cuda()
+        
+        train_bar = tqdm(train_loader, desc='Training', leave=False, dynamic_ncols=True, file=sys.stdout)
+        for i, data in enumerate(train_bar, 0):
             inputs, labels = data['pointcloud'].to(device).float(),
             data['category'].to(device)
             optimizer.zero_grad()
@@ -48,34 +77,44 @@ def train(model, train_loader, val_loader=None, epochs=20, save=True):
             loss = pointNetLoss(outputs, labels, m3x3, m64x64)
             loss.backward()
             optimizer.step()
-    
-            # print statistics
-            running_loss += loss.item()
+            loss_total.update(loss)
+            accuracy(outputs.softmax(dim=-1), labels)
             
-            if i % 10 == 9:
-                # print every 10 mini-batches
-                print('[Epoch: %d, Batch: %4d / %4d], loss: %.3f' %
-                     (epoch + 1, i + 1, len(train_loader),
-                      running_loss / 10))
-                running_loss = 0.0
+            train_bar.set_postfix({
+                'Loss': f'{loss_total.avg:.4f}',
+                'Train Acc': f'{100*accuracy.compute():.2f}%'
+            })
 
-    pointnet.eval()
-    correct = total = 0
-    # validation
-    if val_loader:
-        with torch.no_grad():
-            for data in val_loader:
-                inputs, labels = data['pointcloud'].to(device).float(), data['category'].to(device)
-                outputs, __, __ = pointnet(inputs.transpose(1,2))
-                _, predicted = torch.max(outputs.data, 1)
-                total += labels.size(0)
-                correct += (predicted == labels).sum().item()
-        val_acc = 100. * correct / total
-        print('Valid accuracy: %d %%' % val_acc)
-    
-    # save the model
-    if save:
-        torch.save(pointnet.state_dict(), "save_"+str(epoch)+".pth")
+        acc = 100*accuracy.compute()
+        print(f'Train Acc: {acc:.2f}%, Avg Loss: {loss_total.avg:.4f}')
+
+        pointnet.eval()
+        correct = total = 0
+        # validation
+        if val_loader:
+            test_bar = tqdm(test_loader, desc='Testing', leave=False, dynamic_ncols=True, file=sys.stdout)
+            with torch.no_grad():
+                for i, data in enumerate(test_bar):
+                    inputs, labels = data['pointcloud'].to(device).float(), data['category'].to(device)
+                    outputs, __, __ = pointnet(inputs.transpose(1,2))
+                    _, predicted = torch.max(outputs.data, 1)
+                    total += labels.size(0)
+                    correct += (predicted == labels).sum().item()
+                    test_bar.set_postfix({
+                        'Test Acc': f'{100 * correct / total:.2f}%'
+                    })
+            val_acc = 100. * correct / total
+            print('Valid accuracy: %d %%' % val_acc)
+        
+        # Save last model (full model)
+        torch.save(model, save_path + 'last.pt')
+
+        # Save best model (full model)
+        if val_acc > best_acc:
+            best_acc = val_acc
+            torch.save(model, save_path + 'best.pt')
+            print(f'✅ New best model saved with accuracy: {best_acc:.2f}%')
+
 
 # define path
 path = Path('Datasets/ModelNet10') 
