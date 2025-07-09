@@ -24,7 +24,53 @@ Unlike conventional methods such as PointNet/PointNet++, PCT leverages a transfo
 
 ## 🧪 Training
 
-You can train the model using the following command:
+Before training:
+
+### ⚙️ Setting up `pointnet2_ops_lib` for Sampling & Grouping
+
+The `sample_and_group` function in this project depends on the [Pointnet2\_PyTorch](https://github.com/erikwijmans/Pointnet2_PyTorch) library. To install it:
+
+```bash
+# 1. Clone the official repo
+git clone https://github.com/erikwijmans/Pointnet2_PyTorch.git
+
+# 2. Navigate to the source directory
+cd Pointnet2_PyTorch/pointnet2_ops_lib
+```
+
+#### 🔧 Modify `setup.py` before installation:
+
+Open `setup.py` and do the following:
+
+1. Add the following import at the top:
+
+   ```python
+   from torch.cuda import get_device_capability
+   ```
+
+2. Replace line 20 (the one setting `TORCH_CUDA_ARCH_LIST`) with:
+
+   ```python
+   os.environ["TORCH_CUDA_ARCH_LIST"] = "{}.{}".format(*get_device_capability())
+   ```
+
+This ensures the build system uses the correct CUDA compute capability of your GPU.
+
+---
+
+Then, install it:
+
+```bash
+pip install pointnet2_ops_lib/.
+```
+
+---
+
+This section ensures users won't run into build or runtime issues with CUDA when using the sampling functions.
+
+---
+
+Now you can train the model using the following command:
 
 ```bash
 python train.py
