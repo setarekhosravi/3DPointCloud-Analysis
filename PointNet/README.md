@@ -10,7 +10,8 @@ This directory contains a PyTorch implementation of the **PointNet** architectur
 > Charles R. Qi, Hao Su, Kaichun Mo, Leonidas J. Guibas  
 > [CVPR 2017] [[Paper](https://arxiv.org/abs/1612.00593)]
 
-![Architecture of PointNet](./Images/pointnet.png)
+
+![Architecture of PointNet](Images/pointnet.png)
 
 **PointNet** is a landmark architecture designed to directly consume raw, unordered 3D point clouds. It ensures permutation invariance using:
 - Shared MLP layers for feature extraction,
