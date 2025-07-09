@@ -53,7 +53,7 @@ def pointNetLoss(outputs, labels, m3x3, m64x64, alpha=0.0001):
     bs = outputs.size(0)
     id3x3 = torch.eye(3, requires_grad=True).repeat(bs, 1, 1)
     id64x64 = torch.eye(64, requires_grad=True).repeat(bs, 1, 1)
-    if outputs.is_cuda():
+    if outputs.is_cuda:
         id3x3 = id3x3.cuda()
         id64x64 = id64x64.cuda()
     diff3x3 = id3x3 - torch.bmm(m3x3, m3x3.transpose(1,2))
@@ -63,15 +63,14 @@ def pointNetLoss(outputs, labels, m3x3, m64x64, alpha=0.0001):
 def train(model, train_loader, val_loader=None, epochs=20, save=True):
     best_acc = 0.0
     for epoch in range(epochs):
+        print(f'\nEpoch {epoch+1}/{epochs}')
         pointnet.train()
-        running_loss = 0.0
         loss_total = AverageMeter()
         accuracy = torchmetrics.Accuracy().cuda()
         
         train_bar = tqdm(train_loader, desc='Training', leave=False, dynamic_ncols=True, file=sys.stdout)
         for i, data in enumerate(train_bar, 0):
-            inputs, labels = data['pointcloud'].to(device).float(),
-            data['category'].to(device)
+            inputs, labels = data['pointcloud'].to(device).float(), data['category'].to(device)
             optimizer.zero_grad()
             outputs, m3x3, m64x64 = pointnet(inputs.transpose(1,2))
             loss = pointNetLoss(outputs, labels, m3x3, m64x64)
