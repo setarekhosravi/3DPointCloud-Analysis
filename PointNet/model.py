@@ -96,7 +96,7 @@ class PointNet(nn.Module):
         self.dropout = nn.Dropout(p=0.3)
         self.logsoftmax = nn.LogSoftmax(dim=1)
 
-    def foraward(self, x):
+    def forward(self, x):
         xb, matrix3x3, matrix64x64 = self.transform(x)
         xb = F.relu(self.bn1(self.fc1(xb)))
         xb = F.relu(self.bn2(self.dropout(self.fc2(xb))))
