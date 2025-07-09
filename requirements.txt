@@ -1,0 +1,14 @@
+# Core
+torch==2.2.2+cu121
+torchvision==0.17.2+cu121
+torchmetrics==0.8.0
+
+# Open3D for point cloud processing
+open3d==0.19.0
+
+# Plotting and utilities
+plotly
+tqdm
+
+# Environment
+python_version >= 3.10, <3.11  # Optional: helps reproducibility
