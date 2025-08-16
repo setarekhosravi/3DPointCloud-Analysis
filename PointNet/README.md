@@ -47,7 +47,7 @@ python train.py
 
 ---
 
-## 🔍 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Inference
+## 🔍 Inference
 
 Run inference on a single `.off` file using:
 
